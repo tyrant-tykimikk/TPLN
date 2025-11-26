@@ -1,0 +1,5 @@
+{
+  "name": "TPLN Service Provider Application",
+  "description": "Digital application and agreement form for Member Upgrade Service Providers, featuring e-signatures and document uploads.",
+  "requestFramePermissions": []
+}
