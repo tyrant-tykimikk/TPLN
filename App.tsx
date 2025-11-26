@@ -1,21 +1,89 @@
 
-import React, { useState } from 'react';
-import { InputField } from './components/ui/InputField';
-import { FileUpload } from './components/ui/FileUpload';
-import { SignaturePad } from './components/ui/SignaturePad';
-import { FormData, ApplicantType } from './types';
-import { 
-  TERMS_TEXT_PAGE_2,
-} from './constants';
+import React, { useState, useRef, useEffect } from 'react';
+import SignatureCanvas from 'react-signature-canvas';
+import { Upload, X, Eraser, PenLine } from 'lucide-react';
 
-// Customized SVG representation of the TPLN Logo
-// Matching the reference: 
-// - Bold, rounded teal font.
-// - N letter has NO right vertical line (just left vertical + diagonal).
-// - Orange triangle accent in the top-right corner.
-// - Triangle is shifted right (x=165) per user request, slightly overhanging the N.
-// - Triangle moved up to y=12 per user request.
-// - Triangle hypotenuse remains parallel to N diagonal.
+// --- TYPES ---
+enum ApplicantType {
+  INDIVIDUAL = 'INDIVIDUAL',
+  BUSINESS = 'BUSINESS',
+}
+
+interface FormData {
+  idFront: File | null;
+  idBack: File | null;
+  applicantName: string;
+  applicantType: ApplicantType;
+  idNumber: string;
+  birthDateOrFoundingDate: string;
+  email: string;
+  phone: string;
+  address: string;
+  bankName: string;
+  branchName: string;
+  accountName: string;
+  accountNumber: string;
+  bankCover: File | null;
+  signature1: string | null;
+  signature2: string | null;
+  agreedToTerms: boolean;
+}
+
+// --- CONSTANTS ---
+const TERMS_TEXT_PAGE_2 = `填寫本合約前，請詳閱以下內容:
+本人已經事先審閱本合約，包括經營手冊的政策與程序，並且同意在從事任何經營活動之前，詳閱所有相關合約約定；本人明白及同意本合約，包括經營手冊的政策與程序，對本人均具有約束力。如果本人拒絕履行本合約相關條款，本人同意須以書面通知為愛發光公司並且終止本人的服務商資格。本人瞭解成為服務商，需預先採購三臺 iEnglish pad 硬體，每臺的購買價格為新臺幣 4,400 元，並必須確保我本人用戶帳號處於活躍狀態，並在服務系統中通過服務商培訓考試。此後，每次補貨都以三臺硬體為起點。這批購買的硬體將用於服務商向客戶發貨，客戶在 iEnglish 官網按照市場零售價下單，由服務商負責發貨(硬體)，而軟體帳號則由 iEnglish 公司提供。每當服務商成功銷售一臺包含硬體與軟體的套裝，iEnglish 公司將返還服務商該硬體的進貨成本。其他獎勵金額將根據經營手冊的規定而定。
+本人瞭解任何產品或服務的購買，包括任何套裝組合，這些並非是成為服務商的必要條件。
+本合約包括：服務商協議書經營手冊的政策與程序，所有條款均屬本協議之一部分。
+本人在簽署後，即表示本人已詳閱該所有條款，並同意接受之。本人承諾日後所提供予為愛發光公司及其關係企業之下線資料，均為真實且合法取得，如有虛偽不實，本人願自負法律責任。姓名簽署均必須爲親筆簽署。申請人須年滿二十歲且非無行為能力人(例如: 未經法院爲監護宣告者。)
+
+個人資料使用同意
+本人同意為愛發光公司及其關係企業(包含其授權企業)，於其所推動多層次傳銷經營業務、教育訓練及銷售產品或服務、獎金或其他利益發放所必要之特定目的範圍內，在為愛發光公司及其關係企業已明確告知本人有關蒐集之企業名稱、蒐集之目的、個人資料之類別、個人資料利用之期間、地區、對象及方式、本人依法得行使之權利及方式，及本人得自由選擇提供個人資料時，不提供將對本人權益之影響等告知事項後，得蒐集本人資料，並得依據本人提供之個人資料與本人聯絡或提供為愛發光公司及其關係企業或服務商之相關服務及資訊。在本合約有效期間內及本合約終止或解除後之保存期限屆滿前，於中華民國境內及境外，得以自動化機器或其他非自動化方式處理、利用本人之資料(包括但不限於個人姓名、出生年月日、身份證字號、護照號碼、特徵、婚姻、聯絡方式、財務情況、社會活動），並得於前述國內外傳輸之，並得為前述目的範圍內而將本人之資料提供予上下線服務商處理、委外廠商或具合作、委任等關係之第三人處理、利用及傳輸。本人資料如有變更，亦願立即通知為愛發光公司, 否則,本人瞭解將可能無法獲得為愛發光公司及其關係企業提供之服務與相關權益保障。本人對所提供之個人資料，依法具有查詢或請求閱覽、製給複本、補充或更正、請求停止蒐集、處理、利用或請求刪除之權，並得致電或 email 向客服提出。
+本人同意，對本人之個人資料請求查詢、閱覽、製給複本時，可能須繳交合理的手續費用。本人亦同意如因本人請求停止蒐集、處理或利用、請求查閱、複製、刪除本人資料所造成之權益受損，為愛發光公司及其關係企業不須負損害賠償責任。本人瞭解並同意，本人依法有權不提供個人資料，惟將無法與為愛發光公司及其關係企業成立本合約關係，亦無法獲得來自為愛發光公司及其關係企業之相關服務或享有任何權益 。
+本人亦同意，在為愛發光公司及其關係企業已明確告知本人特定目的外之其他利用目的、範圍及同意與否對本人權益之影響後，為愛發光公司及其關係企業在前述所載之特定目的範圍外，亦得處理及利用本人之資料。
+本人確認填載於本合約上之第三人個人資料，本人已明確向該第三人告知個人資料保護法所要求之個人資料蒐集應告知事項。如因此衍生爭議，本人願自行承擔法律責任。
+本人確認本人已閱讀並理解爲愛發光公司係根據爲愛發光公司隱私政策(下稱”隱私政策“）及符合個人資料保護法之規定下使用本人的個人資料。隱私政策可以在 TPLN APP 上獲得。
+
+A.服務商協議書
+服務商協議書是由您(以下簡稱「服務商」或「本人」)與為愛發光公司所策訂的。為愛發光公司址位於台北市大安區復興南路2段35號3樓-2；電話: 02-23036122。
+1.完整的合約
+本服務商協議書是一份整合性的合約，其内容包括服務商協議書、經營手冊的政策與程序和相關供自由選擇的計劃内容等任何可能修訂及相關的内容以及其後為愛發光公司在發出通知後隨時修訂的内容，一律統稱為「本合約」。無論在什麽内容，所有性別文字均同時包含男性與女性，所有單數字詞包括複數字詞，所有複數字詞也包括單數字詞。
+2.獨立訂約人
+本人明瞭並同意，身為一個獨立的服務商，本人是公司的獨立訂約人。本人不是為愛發光公司之員工、代理人或法定代理人，且除了本合約所允許外，本人並没有被授權代表為愛發光公司。本合約無意或不應被視為為愛發光公司與本人之間構成合夥、代理、僱傭或合資企業關係。
+3.產品及服務之行銷
+(a)本人明白，會員升級爲服務商需要首次以新臺幣 13200 元購買三臺 iEnglish pad 硬體本人同意，本人有權以為愛發光公司所定的價格購買産品，並且以本合約條款及條件來零售 iEnglish 產品及服務。
+(b)本人同意，除非是為愛發光公司發佈的正式文件內之內容或新產品的標示，本人不做關於產品、服務和銷售獎勵計劃的任何虛假、誇大宣稱。為愛發光公司同意，將根據本合約的條款和條件，確實並且即時支付獎金及/或報酬(包括但不限於贈品或其他獎勵)予本人。本人明白且同意，為了符合領取獎金的資格，本人必須達到銷售獎勵計劃的所有要求，包括用戶活躍度要求，且不違反本合約之所有條款規定。本人並同意，本人或本人之團隊無論任何形式的退貨，導致本人不符合領取獎金及/或報酬(包括但不限於贈品或其他獎勵)之資格時，為愛發光公司有權追回本人或本人團隊退貨前，為愛發光公司給付本人的獎金及/或報酬(包括但不限於贈品或其他獎勵)。
+(c)本人不會僅為了領取獎金而購買產品或服務。本人同意，在訂購下一筆 iEnglish 硬體之前，本人會將之前購買的所有硬體轉售出去。此外，我將遵循服務系統中關於進貨提醒的指導來完成我的購買，並確保我的轉售活動基於真實的消費需求，以避免無目的的庫存積累。同時，我保證我的轉售價格將不會低於市場銷售價。
+(d)本人同意鼓勵、督導並且協助本人的團隊，努力銷售公司產品及服務。
+(e)本人同意銷售 iEnglish 產品，並致力於滿足用戶活躍度要求，確保產品服務品質。詳細規則請參考經營手冊。
+4.聲明和保證
+本人在此聲明和保證，本人已獲授權以簽訂本合約，並且本人已經符合所有臺灣市場法律的要求，在臺灣市場得簽訂有效合約及從事服務事業或其他任何在臺灣市場相關的商業活動。當本人遞交及履行本合約，且為公司所核准時，本合約構成一個合法、有效及有約束力的義務。同時本人聲明和保證：
+本人在本合約中所提供的資料是正確和完整的，且若提供任何虛偽不實或誤導的資料，即授權公司得自由裁量宣告本合約自始無效；
+(b)在服務商協議書的身份證號碼和/或税務統一編號是本人居留在臺灣市場的正確税務相關編號；
+(c)本人，如果是在臺灣市場的公民或擁有合法永久居留權的個人，或如果是設立於臺灣市場的營利事業組織，例如是一公司、合夥事業、有限公司或其他任何形式之營利事業組織，依臺灣市場的法律規定合法設立的組織並且營利事業組織的每一位成員皆有適當的合法授權在臺灣市場從事商業活動；
+5.個人及隱私資料
+(a)本人同意為愛發光公司及其關係企業,為計算獎金與統等下線活動之必要，可由為愛發光公司及其關係企業透過傳發業績報表和下線名單之方式，使本人之上線服務商得知與該目的有開之資料。
+(b)因為愛發光公司及其關係企業對本人的服務商資格提供國際性支援所需，本人保證後列資料若非本人之資料者，均由本人以完全符合法令規定所蒐集，且經當事人同意有合法權限允許並授權為愛發光公司及其關係企業得蒐集、處理、利用及國際傳輸後列個人及/或機密性資料：(1)本人已向為愛發光公司及其關係企業提供有關本人的服務商資格及團隊之資料；或(2)本人作為服務商,因業務活動發展所產生之所有資訊，給予(i)其母公司及關係企業，以及(ii)當有需要上線支援時之本人上線服務商，以及(ii)依法令要求合適之政府或管理機關。本人亦同意授權為愛發光公司及其關係企業得在服務商表揚及行銷相關素材上使用本人的個人資料(包括但不限於姓名、肖像權等)。倘本人提供之任何資料致為愛發光公司及其關係企業受有損害或第三人求償時，本人同意負完全之賠償責任。
+6.保密條款
+(a)本人完全了解本人因身為服務商而直接或間接自為愛發光公司或其關係企業所取得的，或自其他服務商取得而與為愛發光公司或其關係企業有關或其等組織、運作有關的，物品、資訊、資料、知識(不論其形式及媒介為何)(以下合稱「iEnglish 資訊」)(包括但不限於錄影、照片、文字、展示品、服務商名單、服務商資料、客戶名單、 客戶資料、成本、產品資料、獎金、業績、服務商制度、會議內容、合約及其内容、服務商組織訊息、教材、推廣技能)均專屬於為愛發光公司及其關係企業所有，並有保密之必要。本人同意並保證於身為服務商期間，只能專為履行服務商協議書、合約以及拓展 iEnglish 服務事業才能加以使用前揭 iEnglish 資訊，絕不能做為他用或以直接或間接方式違約揭露於第三人。本人同意並保證於會籍終止後，非經為愛發光公司及其關係企業事先書面許可，絕不揭露、交付、使用、複印、抄錄、重製、保留、上載、下載、傳輸、或散佈任何之 iEnglish 資訊。如有任何違反，均應負違約、泄密之責。
+(b)本人同意，為愛發光公司及其關係企業得自行裁量認定本人之行為是否違反保密條款及是否屬不利、分裂或有害為愛發光公司或其他關係企業或為愛發光公司之服務組織，並得依認定結果對於本人之會籍採取合約所規定之行動。
+
+B. 產品訂購協議書(臺灣市場)
+(a)本產品訂購協議書是由為愛發光教育科技有限公司(以下簡稱為"為愛發光公司")，址設台北市大安區復興南路 2 段 35 號 3 樓-2，電話:02-23036122，與本人所簽訂的。為愛發光公司，在臺灣市場獨家專售 iEnglish 產品，其硬體上所載有的軟體和內容其所有權及其智慧財產歸屬於 Top iEnglish Technology Holding Limited，為愛發光公司根據本規則授權您享有並使用軟體及內容。根據本產品訂購協議書，為愛發光公司以其售價提供 iEnglish 產品給予本人在臺灣市場購買。
+(b)如購買產品或業務輔銷品之服務商，服務商得自訂約日起算 30 日內，以書面通知本公司解除或終止契約。詳細政策，參考經營手冊第三章第三條、第五條、第六條、第七條、第八條和第四章第(二)(三)條的相關規定。
+(c)若服務商在產品未售賣前發現因快遞、或其他不可抗力因素造成的產品損壞，可在服務商平臺申請換貨。
+(d)服務商自訂約日起算 30 日，此期間經過後，仍得隨時以書面終止契約，退出本公司，並要求退貨。詳細政策，參考經營手冊第三章第三條、第五條、第六條、第七條、第八條和第四章退換貨的相關規定。
+(e)本人同意只可以在臺灣市場銷售購為愛發光公司所進口的產品。本人不會自行進口和轉售為愛發光公司其他市場的產品到臺灣市場，本人了解這様的做法會導致及造成為愛發光公司及其關係企業不可彌補的損害。
+(f)本產品訂購協議書之履行，以中華民國相關法律為準據法並據以解釋之。若因本產品訂購協議書有爭訟之必要時，為愛發光公司與本人合意以臺灣臺北地方法院為第一審管轄法院。
+
+C.獎金之直接轉帳
+(a)本人授權為愛發光公司將本人的業績獎金轉帳至本人所指定的銀行帳號。該授權將持續有效，除非(i)為愛發光公司收到本人撤回轉帳的書面通知，和(ii)為愛發光公司有合理的機會，依據本人的通知做變動。本人瞭解此等變動之授權將取代先前的授權並且持續有效直到本人另以書面通知公司撤回前揭之直接轉帳授權。
+(b)本人同意在下列情形發生之前，本人必須立即通知公司(i)變動或終止上述帳號，或(ii)本人的金融機構更改本人的銀行帳號。若本人未依前述承諾通知為愛發光公司帳號更改，將會使本人延遲收到業績獎金，如果本人更改銀行及/或銀行帳號，本人必須填寫一張新的銀行轉帳授權表格，並且在本人原帳號終止之前即遞送至為愛發光公司。
+(c)除非有直接的原因顯示乃因公司的疏失或蓄意行為而導致公司未能將獎金匯入本人指定的銀行帳戶，否則公司對此不負有責任。如公司對此需負有責任，該責任額度最多將不會超出原本應匯入該銀行帳户的金額。
+(d)本人同意日後若申請重新加入，本人若未表示不同意公司將本人的業績獎金轉帳到重新加入前本人原先指定之銀行帳號，並請公司改轉帳至新指定之銀行帳號者，視為同意並授權公司將本人的業績獎金轉帳至重新加入前本人所指定的銀行帳號。
+附：經營手冊的政策與程序
+`;
+
+// --- COMPONENT: TPLN LOGO ---
 const TplnLogo = () => (
   <svg viewBox="0 0 185 55" className="w-full h-full max-h-14" aria-label="TPLN Logo">
     <defs>
@@ -26,29 +94,174 @@ const TplnLogo = () => (
         `}
       </style>
     </defs>
-    
-    {/* T */}
     <path d="M15 15 H 40" className="tpln-text" />
     <path d="M27.5 15 V 45" className="tpln-text" />
-    
-    {/* P */}
     <path d="M55 45 V 15 H 68 C 80 15 80 32 68 32 H 55" className="tpln-text" />
-    
-    {/* L */}
     <path d="M95 15 V 45 H 120" className="tpln-text" />
-    
-    {/* N - No right vertical line */}
-    {/* Vertical left (135,45 -> 135,15), then diagonal down-right (135,15 -> 160,45) */}
     <path d="M135 45 V 15 L 160 45" className="tpln-text" />
-    
-    {/* Orange Triangle - Top Right of N */}
-    {/* Shifted up to y=12 per request */}
-    {/* Top-Right(165,12), Top-Left(150,12) */}
-    {/* Bottom-Right adjusted to 30 to maintain parallel slope (1.2) with N */}
     <path d="M150 12 L 165 12 L 165 30 Z" className="tpln-accent" />
   </svg>
 );
 
+// --- COMPONENT: INPUT FIELD ---
+interface InputFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label?: string;
+  fullWidth?: boolean;
+}
+
+const InputField: React.FC<InputFieldProps> = ({ 
+  label, 
+  fullWidth = true, 
+  className = '', 
+  ...props 
+}) => {
+  return (
+    <div className={`w-full ${className}`}>
+      {label && <div className="text-sm font-bold mb-1">{label}</div>}
+      <input
+        className={`
+          w-full bg-transparent border-b border-gray-300 focus:border-blue-500
+          text-gray-900 px-1 py-1 outline-none text-base font-medium
+          placeholder-gray-300
+        `}
+        placeholder="點擊輸入..."
+        {...props}
+      />
+    </div>
+  );
+};
+
+// --- COMPONENT: FILE UPLOAD ---
+interface FileUploadProps {
+  label: string;
+  file: File | null;
+  onFileChange: (file: File | null) => void;
+  className?: string;
+}
+
+const FileUpload: React.FC<FileUploadProps> = ({
+  label,
+  file,
+  onFileChange,
+  className = ''
+}) => {
+  const [preview, setPreview] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (file) {
+      const objectUrl = URL.createObjectURL(file);
+      setPreview(objectUrl);
+      return () => URL.revokeObjectURL(objectUrl);
+    } else {
+      setPreview(null);
+    }
+  }, [file]);
+
+  const handleContainerClick = () => {
+    inputRef.current?.click();
+  };
+
+  const handleClear = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onFileChange(null);
+    if (inputRef.current) inputRef.current.value = '';
+  };
+
+  return (
+    <div 
+      onClick={handleContainerClick}
+      className={`w-full h-full flex flex-col items-center justify-center cursor-pointer p-4 relative overflow-hidden ${className}`}
+    >
+      <input
+        type="file"
+        ref={inputRef}
+        className="hidden"
+        accept="image/*"
+        onChange={(e) => onFileChange(e.target.files?.[0] || null)}
+      />
+
+      {preview ? (
+        <>
+          <img 
+            src={preview} 
+            alt="Preview" 
+            className="absolute inset-0 w-full h-full object-contain bg-white z-0" 
+          />
+          <button
+            onClick={handleClear}
+            className="absolute top-2 right-2 p-1 bg-white/80 rounded-full text-red-600 z-10 hover:bg-white"
+          >
+            <X size={16} />
+          </button>
+        </>
+      ) : (
+        <div className="text-center z-10 pointer-events-none">
+          <div 
+            className="text-lg font-bold text-gray-300 mb-2 uppercase tracking-widest select-none"
+            dangerouslySetInnerHTML={{ __html: label }}
+          />
+          <div className="flex flex-col items-center text-blue-500 mt-2">
+            <Upload size={24} className="mb-1" />
+            <span className="text-xs bg-blue-50 px-2 py-1 rounded">點擊上傳圖片</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- COMPONENT: SIGNATURE PAD ---
+interface SignaturePadProps {
+  label: string;
+  onEnd: (dataUrl: string | null) => void;
+  required?: boolean;
+}
+
+const SignaturePad: React.FC<SignaturePadProps> = ({ onEnd }) => {
+  const sigPad = useRef<SignatureCanvas>(null);
+
+  const clear = () => {
+    sigPad.current?.clear();
+    onEnd(null);
+  };
+
+  const handleEnd = () => {
+    if (sigPad.current && !sigPad.current.isEmpty()) {
+      onEnd(sigPad.current.getTrimmedCanvas().toDataURL('image/png'));
+    } else {
+      onEnd(null);
+    }
+  };
+
+  return (
+    <div className="w-full h-full flex flex-col relative">
+      <SignatureCanvas
+        ref={sigPad}
+        penColor="black"
+        canvasProps={{
+          className: 'w-full h-24 bg-transparent cursor-crosshair z-10 touch-action-none',
+        }}
+        onEnd={handleEnd}
+      />
+      <div className="absolute top-2 right-2 z-20">
+        <button
+          type="button"
+          onClick={clear}
+          className="text-gray-400 hover:text-red-500 transition-colors bg-white/50 rounded-full p-1"
+          title="清除重簽"
+        >
+          <Eraser size={14} />
+        </button>
+      </div>
+      <div className="absolute bottom-1 right-2 pointer-events-none text-gray-200 flex items-center">
+         <PenLine size={16} className="mr-1" /> 簽名處
+      </div>
+    </div>
+  );
+};
+
+// --- MAIN APP COMPONENT ---
 const App: React.FC = () => {
   const [data, setData] = useState<FormData>({
     idFront: null,
@@ -75,7 +288,6 @@ const App: React.FC = () => {
     setData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Common border styles to replicate the table look
   const cellClass = "p-2 border-r border-black last:border-r-0";
   const labelClass = "font-bold text-sm block mb-1";
   const sectionHeaderClass = "bg-gray-100 font-bold text-sm p-1 border-b border-black";
@@ -84,17 +296,12 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-gray-100 py-4 md:py-8 px-2 md:px-0 text-black font-sans flex justify-center">
       <div className="w-full max-w-[210mm] bg-white shadow-xl p-4 md:p-8 box-border">
         
-        {/* Main Table Container */}
         <div className="border-2 border-black flex flex-col">
           
-          {/* --- HEADER SECTION --- */}
           <div className="flex border-b border-black">
-             {/* Logo Column */}
              <div className="w-[25%] md:w-[20%] border-r border-black flex items-center justify-center p-2 md:p-4">
                 <TplnLogo />
              </div>
-             
-             {/* Company Info Column */}
              <div className="w-[75%] md:w-[80%] p-2 text-center flex flex-col justify-center">
                 <h1 className="text-lg md:text-xl font-bold mb-1 tracking-wider">為愛發光教育科技有限公司</h1>
                 <h2 className="text-sm md:text-md font-bold mb-1 leading-tight">會員升級服務商申請暨協議書(內含產品訂購協議書)-TW</h2>
@@ -104,24 +311,19 @@ const App: React.FC = () => {
              </div>
           </div>
 
-          {/* Service Provider ID Row */}
           <div className="border-b border-black p-2 flex items-center h-10 bg-white">
             <span className="font-bold text-sm mr-2 flex-shrink-0">服務商識別號碼：</span>
-            {/* Read-only field explicitly marked for company use */}
             <div className="flex-1 bg-gray-200 border-b border-gray-400 h-8 px-2 flex items-center">
               <span className="text-gray-500 text-sm">(由公司填寫)</span>
             </div>
           </div>
 
-          {/* --- PAGE 1 CONTENT --- */}
-          
-          {/* ID Upload Section */}
           <div className="flex border-b border-black h-48">
             <div className="w-1/2 border-r border-black relative group hover:bg-gray-50 transition-colors">
               <FileUpload 
                 label="將證件影本黏貼此處<br/>身份證影本(正面)實貼處"
                 file={data.idFront}
-                onFileChange={(f) => setData(prev => ({ ...prev, idFront: f }))}
+                onFileChange={(f: File | null) => setData(prev => ({ ...prev, idFront: f }))}
                 className="h-full"
               />
             </div>
@@ -129,27 +331,23 @@ const App: React.FC = () => {
                <FileUpload 
                 label="將證件影本黏貼此處<br/>身份證影本(反面)實貼處"
                 file={data.idBack}
-                onFileChange={(f) => setData(prev => ({ ...prev, idBack: f }))}
+                onFileChange={(f: File | null) => setData(prev => ({ ...prev, idBack: f }))}
                 className="h-full"
               />
             </div>
           </div>
 
-          {/* Disclaimer Text */}
           <div className="p-2 text-[10px] border-b border-black leading-tight text-justify">
             服務商將會獲得一個經指定之服務商編號,以使用於其會籍内與iEnglish産品和為愛發光公司間所有交易活動。服務商必須確保以下所提供的資料均為屬實且正確， 並且同意如果該資料為虛假不實或有誤導情事時，iEnglish得宣告本合約自始作廢無效。
           </div>
 
-          {/* Step 1 Header */}
           <div className={sectionHeaderClass}>
             步驟 — 新帳號資料<br/>
             <span className="font-normal text-[10px] block mt-0.5">個人(唯一參與人)&gt;最新之身份證正反面影本,務必清晰,不可以其他證件代替。<br/>
             《營利事業》法定代理人/負責人最新之身份證正反面影本及附上公司及商業登記證明文件。</span>
           </div>
 
-          {/* Step 1 Grid */}
           <div className="grid grid-cols-2 text-sm">
-            {/* Row 1 */}
             <div className={`col-span-1 ${cellClass} border-b`}>
               <label className={labelClass}>服務商姓名</label>
               <span className="text-[10px] text-gray-500 block mb-1">(先寫姓氏，姓名必須為身份證明文件上的姓名；若為營利事業，請寫營利事業的全名)</span>
@@ -187,7 +385,6 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Row 2 */}
             <div className={`col-span-1 ${cellClass} border-b`}>
               <label className={labelClass}>身份證號碼 / 營利事業統一編號</label>
               <InputField 
@@ -206,7 +403,6 @@ const App: React.FC = () => {
               />
             </div>
 
-            {/* Row 3 */}
             <div className={`col-span-1 ${cellClass} border-b`}>
               <label className={labelClass}>電子信箱</label>
               <InputField 
@@ -226,7 +422,6 @@ const App: React.FC = () => {
               />
             </div>
 
-            {/* Row 4 */}
             <div className={`col-span-2 ${cellClass} border-b`}>
               <label className={labelClass}>通訊 / 郵寄地址</label>
               <InputField 
@@ -237,21 +432,17 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Step 2 */}
           <div className={sectionHeaderClass}>
             步骤二<br/>
             <span className="font-normal text-sm block mt-0.5">以新臺幣13200元預購三臺硬體。</span>
           </div>
 
-          {/* Step 3 Header */}
           <div className={sectionHeaderClass}>
             步驟三 奬金之直接匯款<br/>
             <span className="font-normal text-[10px] block mt-0.5">本人同意授權公司將本人的奬金轉帳匯入本人的以下銀行帳號(請附上您的銀行存摺封面影印本以作為核對銀行帳號之用)</span>
           </div>
 
-          {/* Step 3 Bank Grid */}
           <div className="grid grid-cols-2 text-sm">
-            {/* Row 1 */}
             <div className={`col-span-1 ${cellClass} border-b`}>
               <label className={labelClass}>金融機構名稱</label>
               <InputField 
@@ -269,7 +460,6 @@ const App: React.FC = () => {
               />
             </div>
 
-            {/* Row 2 */}
             <div className={`col-span-1 ${cellClass} border-b`}>
               <label className={labelClass}>戶名</label>
               <InputField 
@@ -287,18 +477,16 @@ const App: React.FC = () => {
               />
             </div>
 
-            {/* Row 3: Bank Book Upload */}
             <div className={`col-span-2 border-b border-black h-40 relative group hover:bg-gray-50 transition-colors`}>
                <FileUpload 
                 label="將銀行存摺封面的影本黏貼此處"
                 file={data.bankCover}
-                onFileChange={(f) => setData(prev => ({ ...prev, bankCover: f }))}
+                onFileChange={(f: File | null) => setData(prev => ({ ...prev, bankCover: f }))}
                 className="h-full"
               />
             </div>
           </div>
 
-          {/* Signatures 1 */}
           <div className="flex border-b border-black">
              <div className="w-1/2 p-2 border-r border-black flex flex-col justify-center text-[10px] leading-relaxed">
                <p className="font-bold mb-1">本人特此簽名表示已接受告知事項並單獨簽署同意</p>
@@ -307,12 +495,11 @@ const App: React.FC = () => {
              <div className="w-1/2 p-2">
                <SignaturePad 
                  label="簽名"
-                 onEnd={(sig) => setData(prev => ({ ...prev, signature1: sig }))}
+                 onEnd={(sig: string | null) => setData(prev => ({ ...prev, signature1: sig }))}
                />
              </div>
           </div>
 
-          {/* Signatures 2 */}
           <div className="flex">
              <div className="w-1/2 p-2 border-r border-black flex flex-col justify-center text-[10px] leading-relaxed">
                <p className="font-bold mb-1">本人特此簽名表示了解並接受該仲裁協議</p>
@@ -321,14 +508,13 @@ const App: React.FC = () => {
              <div className="w-1/2 p-2">
                <SignaturePad 
                  label="簽名"
-                 onEnd={(sig) => setData(prev => ({ ...prev, signature2: sig }))}
+                 onEnd={(sig: string | null) => setData(prev => ({ ...prev, signature2: sig }))}
                />
              </div>
           </div>
 
         </div>
 
-        {/* --- PAGE 2 (Text Content) --- */}
         <div className="mt-8 md:mt-16 pt-8 border-t-4 border-double border-gray-300 text-xs text-gray-600 leading-relaxed whitespace-pre-wrap text-justify font-serif">
            <h3 className="text-center font-bold text-sm mb-4 text-black font-sans">協議書條款 (Page 2)</h3>
            {TERMS_TEXT_PAGE_2}

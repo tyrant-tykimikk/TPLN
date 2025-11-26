@@ -1,3 +1,4 @@
+
 {
   "name": "tpln-service-provider-application",
   "private": true,
@@ -17,6 +18,7 @@
   "devDependencies": {
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",
+    "@types/react-signature-canvas": "^1.0.2",
     "@vitejs/plugin-react": "^4.2.0",
     "typescript": "^5.2.2",
     "vite": "^5.0.0"
